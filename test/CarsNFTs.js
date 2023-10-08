@@ -23,15 +23,17 @@ const signerRoles = [
 const mintPrice = hre.ethers.utils.parseEther("0.1");
 const addPeoplePrice = hre.ethers.utils.parseEther("0.05");
 const removePeoplePrice = hre.ethers.utils.parseEther("0.05");
+const transferPrice = hre.ethers.utils.parseEther("0.05");
 
 const updateMintPrice = hre.ethers.utils.parseEther("0.05");
 const updateAddPeoplePrice = hre.ethers.utils.parseEther("0.025");
 const updateRemovePeoplePrice = hre.ethers.utils.parseEther("0.025");
+const updateTransferPrice = hre.ethers.utils.parseEther("0.025");
 
-const parkFee = hre.ethers.utils.parseEther("0.1");
+const parkFee = hre.ethers.utils.parseEther("0.001");
 const fineFee = hre.ethers.utils.parseEther("0.5");
 
-const updateParkFee = hre.ethers.utils.parseEther("0.05");
+const updateParkFee = hre.ethers.utils.parseEther("0.0005");
 const updateFineFee = hre.ethers.utils.parseEther("0.25");
 
 describe("Blockchain Parking System", function () {
@@ -54,7 +56,8 @@ describe("Blockchain Parking System", function () {
       carsNFTsInstance = await carsNFTFactory.deploy(
         mintPrice,
         addPeoplePrice,
-        removePeoplePrice
+        removePeoplePrice,
+        transferPrice
       );
       await carsNFTsInstance.deployed();
 
@@ -221,16 +224,19 @@ describe("Blockchain Parking System", function () {
         const modifyCostsTx = await ownerInstance.setCosts(
           updateMintPrice,
           updateAddPeoplePrice,
-          updateRemovePeoplePrice
+          updateRemovePeoplePrice,
+          updateTransferPrice
         );
         await modifyCostsTx.wait();
 
         const mintPrice = await carsNFTsInstance.mintPrice();
         const addPeoplePrice = await carsNFTsInstance.addPeoplePrice();
         const removePeoplePrice = await carsNFTsInstance.removePeoplePrice();
+        const transferPrice = await carsNFTsInstance.transferPrice();
         expect(addPeoplePrice).to.equal(updateAddPeoplePrice);
         expect(removePeoplePrice).to.equal(updateRemovePeoplePrice);
         expect(mintPrice).to.equal(updateMintPrice);
+        expect(transferPrice).to.equal(updateTransferPrice);
       });
 
       it("Should NOT allow non-owner to modify costs", async function () {
@@ -241,7 +247,8 @@ describe("Blockchain Parking System", function () {
           carOnwerInstance.setCosts(
             mintPrice,
             addPeoplePrice,
-            removePeoplePrice
+            removePeoplePrice,
+            transferPrice
           )
         ).to.be.revertedWith("Ownable: caller is not the owner");
       });
@@ -253,7 +260,8 @@ describe("Blockchain Parking System", function () {
         );
         const transferTx = await carOnwerInstance.transferCar(
           carNumber,
-          sigAddrs.car2Owner
+          sigAddrs.car2Owner,
+          { value: updateTransferPrice }
         );
         await transferTx.wait();
 
@@ -297,7 +305,9 @@ describe("Blockchain Parking System", function () {
           sigInstances.car1Owner
         );
         await expect(
-          carOnwerInstance.transferCar(carNumber, sigAddrs.car2Owner)
+          carOnwerInstance.transferCar(carNumber, sigAddrs.car2Owner, {
+            value: updateTransferPrice,
+          })
         ).to.be.revertedWith("You are not the owner of this car");
       });
     });
@@ -312,7 +322,7 @@ describe("Blockchain Parking System", function () {
         const setFinePriceTx = await ownerInstance.setFine(updateFineFee);
         await setFinePriceTx.wait();
 
-        const parkFee = await parkingInstance.HalfHourParkFee();
+        const parkFee = await parkingInstance.OneMinuteParkFee();
         const fine = await parkingInstance.fineForLateUnparking();
 
         expect(parkFee).to.equal(updateParkFee);
@@ -343,7 +353,7 @@ describe("Blockchain Parking System", function () {
           parkingSystemAddress
         );
 
-        const amountToAdd = hre.ethers.utils.parseEther("0.15");
+        const amountToAdd = hre.ethers.utils.parseEther("0.005");
         const addBalanceTx = await carOnwerInstance.addBalanceToCar(carNumber, {
           value: amountToAdd,
         });
@@ -419,12 +429,12 @@ describe("Blockchain Parking System", function () {
           sigInstances.car2Owner
         );
         const addBalanceTx = await carOnwerInstance.addBalanceToCar(carNumber, {
-          value: parkFee,
+          value: updateParkFee.mul(10), // 10 minutes of parking balance
         });
         await addBalanceTx.wait();
 
         await expect(
-          carOnwerInstance.startParking(carNumber, 30)
+          carOnwerInstance.startParking(carNumber, 5) // 5 minutes of parking
         ).to.be.revertedWith(
           "Only Allowed Parking System can call this function"
         );
@@ -492,7 +502,7 @@ describe("Blockchain Parking System", function () {
             sigInstances.car2Owner
           );
 
-          const parkCarTx = await carOnwerInstance.startParking(carNumber, 30);
+          const parkCarTx = await carOnwerInstance.startParking(carNumber, 5);
           await parkCarTx.wait();
 
           const carInfo = await carsNFTsInstance.getCarInfo(carNumber);
@@ -539,8 +549,11 @@ describe("Blockchain Parking System", function () {
           const parkingSystemBalanceBefore =
             await hre.ethers.provider.getBalance(parkingSystemAddress);
           const carBalanceBefore = await parkingInstance.carBalance(carNumber);
+
           const totalCarsBalanceBefore =
             await parkingInstance.totalCarBalances();
+
+          await helpers.time.increase(120);
 
           const unparkCarTx = await carOnwerInstance.stopParking(carNumber);
           await unparkCarTx.wait();
@@ -559,16 +572,17 @@ describe("Blockchain Parking System", function () {
             unparkCarTx.blockNumber
           );
           const finalParkTime = hre.ethers.BigNumber.from(txBlock.timestamp);
-          const parkingFee = await parkingInstance.HalfHourParkFee();
+          const parkingFee = await parkingInstance.OneMinuteParkFee();
 
           const amountToPay = finalParkTime
             .sub(initialParkTime)
-            .mul(parkingFee)
-            .div(30);
+            .div(60)
+            .mul(parkingFee);
 
           expect(parkingSystemBalanceAfter).to.equal(
             parkingSystemBalanceBefore
           );
+
           expect(carBalanceAfter).to.equal(carBalanceBefore.sub(amountToPay));
           expect(totalCarsBalanceAfter).to.equal(
             totalCarsBalanceBefore.sub(amountToPay)
@@ -584,7 +598,7 @@ describe("Blockchain Parking System", function () {
           );
           const parkCarTx = await carAllowedPersonInstance.startParking(
             carNumber,
-            30
+            5
           );
           await parkCarTx.wait();
           const carInfo = await carsNFTsInstance.getCarInfo(carNumber);
@@ -662,7 +676,12 @@ describe("Blockchain Parking System", function () {
           sigInstances.car2Owner
         );
 
-        const parkCarTx = await carOnwerInstance.startParking(carNumber, 30);
+        const addBalanceTx = await carOnwerInstance.addBalanceToCar(carNumber, {
+          value: updateParkFee.mul(30), // 30 minutes of parking balance
+        });
+        await addBalanceTx.wait();
+
+        const parkCarTx = await carOnwerInstance.startParking(carNumber, 5);
         await parkCarTx.wait();
 
         await helpers.time.increase(10);
@@ -685,7 +704,6 @@ describe("Blockchain Parking System", function () {
       });
 
       it("Should add fine if unparking late", async function () {
-        const fineAmount = await parkingInstance.fineForLateUnparking();
         const carNumber = "AAA-123";
         const carOnwerInstance = await parkingInstance.connect(
           sigInstances.car2Owner
@@ -694,16 +712,18 @@ describe("Blockchain Parking System", function () {
         const parkCarTx = await carOnwerInstance.startParking(carNumber, 30);
         await parkCarTx.wait();
 
-        await helpers.time.increase(300);
+        const carBalance = await parkingInstance.carBalance(carNumber);
+        await helpers.time.increase(3600); // 1 hour
 
         const unparkCarTx = await carOnwerInstance.stopParking(carNumber);
         await unparkCarTx.wait();
 
         const carFines = await parkingInstance.listOfCarFines(carNumber);
+        const fineFee = await parkingInstance.fineForLateUnparking();
 
         const carInfo = await carsNFTsInstance.getCarInfo(carNumber);
-        expect(carInfo[2]).to.equal(fineAmount);
-        expect(carFines).to.equal(fineAmount);
+        expect(carInfo[2]).to.equal(fineFee);
+        expect(carFines).to.equal(fineFee);
       });
 
       it("Should NOT allow to pay fine if not enough value sent", async function () {

@@ -1,26 +1,46 @@
-// We require the Hardhat Runtime Environment explicitly here. This is optional
-// but useful for running the script in a standalone fashion through `node <script>`.
-//
-// You can also run a script with `npx hardhat run <script>`. If you do that, Hardhat
-// will compile your contracts, add the Hardhat Runtime Environment's members to the
-// global scope, and execute the script.
 const hre = require("hardhat");
 
+const mintPrice = ethers.utils.parseEther("0.01");
+const addPeoplePrice = ethers.utils.parseEther("0.001");
+const removePeoplePrice = ethers.utils.parseEther("0.001");
+const transferPrice = ethers.utils.parseEther("0.005");
+const parkFee = ethers.utils.parseEther("0.001");
+const fineFee = ethers.utils.parseEther("0.02");
+
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-  const unlockTime = currentTimestampInSeconds + ONE_YEAR_IN_SECS;
+  // Setup accounts
+  const [CarNFTsDeployer, ParkingSystemDeployer] =
+    await hre.ethers.getSigners();
 
-  const lockedAmount = hre.ethers.utils.parseEther("1");
-
-  const Lock = await hre.ethers.getContractFactory("Lock");
-  const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
-
-  await lock.deployed();
-
-  console.log(
-    `Lock with 1 ETH and unlock timestamp ${unlockTime} deployed to ${lock.address}`
+  // Deploy CarNFTs contract
+  const CarNFTsFactory = await hre.ethers.getContractFactory(
+    "CarsNFTs",
+    CarNFTsDeployer
   );
+  const carNFTsInstance = await CarNFTsFactory.deploy(
+    mintPrice,
+    addPeoplePrice,
+    removePeoplePrice,
+    transferPrice
+  );
+  await carNFTsInstance.deployed();
+  console.log("CarNFTs deployed to:", carNFTsInstance.address);
+
+  const ParkingSystemFactory = await hre.ethers.getContractFactory(
+    "StreetParking",
+    ParkingSystemDeployer
+  );
+  const parkingSystemInstance = await ParkingSystemFactory.deploy(
+    parkFee,
+    fineFee,
+    carNFTsInstance.address
+  );
+
+  await parkingSystemInstance.deployed();
+  console.log("ParkingSystem deployed to:", parkingSystemInstance.address);
+
+  console.log("Owner Of Contracts:", await carNFTsInstance.owner());
+  console.log("Owner Of Contracts:", await parkingSystemInstance.owner());
 }
 
 // We recommend this pattern to be able to use async/await everywhere
@@ -29,3 +49,8 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+
+// CarNFTs deployed to: 0xb1f0b994eF138EB6949Cc36a609a8fc03D9614bD
+// ParkingSystem deployed to: 0x4fB4D99A8356F524B348EfD193293928E4A02479
+// Owner Of Contracts: 0xc68f118ba14aff63B66d0f7D84c5c9861F5FB862
+// Owner Of Contracts: 0xc68f118ba14aff63B66d0f7D84c5c9861F5FB862

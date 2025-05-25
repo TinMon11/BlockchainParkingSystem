@@ -43,7 +43,7 @@ describe("Blockchain Parking System", function () {
       for (let i = 0; i < signerRoles.length; i++) {
         const signerRole = signerRoles[i];
         sigInstances[signerRole] = testSigners[i];
-        sigAddrs[signerRole] = await sigInstances[signerRole].getAddress();
+        sigAddrs[signerRole] = await sigInstances[signerRole].address;
       }
     });
 
@@ -545,7 +545,6 @@ describe("Blockchain Parking System", function () {
           const carOnwerInstance = await parkingInstance.connect(
             sigInstances.car2Owner
           );
-
           const parkingSystemBalanceBefore =
             await hre.ethers.provider.getBalance(parkingSystemAddress);
           const carBalanceBefore = await parkingInstance.carBalance(carNumber);
@@ -563,7 +562,6 @@ describe("Blockchain Parking System", function () {
           const carBalanceAfter = await parkingInstance.carBalance(carNumber);
           const totalCarsBalanceAfter =
             await parkingInstance.totalCarBalances();
-
           const carInfo = await carsNFTsInstance.getCarInfo(carNumber);
           const initialParkTime = await parkingInstance.initialParkTime(
             carNumber
@@ -573,12 +571,10 @@ describe("Blockchain Parking System", function () {
           );
           const finalParkTime = hre.ethers.BigNumber.from(txBlock.timestamp);
           const parkingFee = await parkingInstance.OneMinuteParkFee();
-
           const amountToPay = finalParkTime
             .sub(initialParkTime)
             .div(60)
             .mul(parkingFee);
-
           expect(parkingSystemBalanceAfter).to.equal(
             parkingSystemBalanceBefore
           );
